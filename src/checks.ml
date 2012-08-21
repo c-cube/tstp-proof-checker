@@ -97,7 +97,7 @@ let check_step prover derivation step_name =
   and o2, i2 = Unix.pipe () in
   if !debug > 0
     then Format.printf "run prover %s on step %s@." prover#name (Utils.print_name step_name);
-  let pid = Unix.create_process "/bin/sh" [|prover#command|] o1 i2 i2 in
+  let pid = Unix.create_process "/bin/sh" [|"-c"; prover#command|] o1 i2 i2 in
   let output, input = make_channels (o2, i1) in
   let in_formatter = Format.formatter_of_out_channel input in
   (* send derivation obligation to the prover *)
