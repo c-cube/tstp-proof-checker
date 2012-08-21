@@ -172,7 +172,7 @@ rule token =
                                        failwith "Parser_tptp: tfh syntax not supported." }
       | "include"                    { update_token (Lexing.lexeme lexbuf); INCLUDE }
       | "inference"                  { update_token (Lexing.lexeme lexbuf); INFERENCE }
-      | "file "                      { update_token (Lexing.lexeme lexbuf); FILE }
+      | "file"                      { update_token (Lexing.lexeme lexbuf); FILE }
       | lower_word                   { update_token (Lexing.lexeme lexbuf); LOWER_WORD(Lexing.lexeme lexbuf) }
       | upper_word                   { update_token (Lexing.lexeme lexbuf); UPPER_WORD(Lexing.lexeme lexbuf) }
       | single_quoted_lower_word     { update_token (Lexing.lexeme lexbuf); 

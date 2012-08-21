@@ -111,7 +111,7 @@ file:
 
 tptp_input:
   | annotated_formula
-      { Some $1 }
+      { Printf.printf "parsed annotated formula\n"; Some $1 }
 
   | include_
       { None }
@@ -263,8 +263,9 @@ formula_role:
 annotations:
   | null
       { None }
-
-  | COMMA source optional_info
+  | COMMA source
+      { Some $2 }
+  | COMMA source COMMA optional_info
       { Some $2 }
 
 
@@ -418,14 +419,14 @@ variable:
 source:
   | FILE LEFT_PARENTHESIS file_name COMMA name RIGHT_PARENTHESIS
       { AnnotFile ($3, $5) }
-  | INFERENCE LEFT_PARENTHESIS inference_name COMMA general_term COMMA
+  | INFERENCE LEFT_PARENTHESIS inference_name COMMA useful_info COMMA
     parent_info_list RIGHT_PARENTHESIS
       { AnnotInference ($3, $7) }
   | name 
       { AnnotName $1 }
 
 parent_info_list:
-  | '[' source_list ']'
+  | LEFT_BRACKET source_list RIGHT_BRACKET
       { $2 }
 
 source_list:
@@ -439,15 +440,15 @@ inference_name:
       { $1 }
 
 optional_info:
-  | COMMA useful_info
+  | useful_info
       { "" }
 
   | null
       { "" }
 
 useful_info:
-  | general_term_list
-      { "" }
+  | LEFT_BRACKET general_term_list RIGHT_BRACKET
+      { $2 }
       
 
 include_:
@@ -455,7 +456,7 @@ include_:
       { include_files := $3 :: !include_files }
 
 formula_selection:
-  | COMMA '[' name_list ']'
+  | COMMA LEFT_BRACKET name_list RIGHT_BRACKET
       { $3 }
 
   | null
@@ -501,10 +502,10 @@ general_arguments:
       { $1 :: $3 }
 
 general_list:
-  | '[' ']'
+  | LEFT_BRACKET RIGHT_BRACKET
       { [] }
 
-  | '[' general_term_list ']'
+  | LEFT_BRACKET general_term_list RIGHT_BRACKET
       { $2 }
 
 general_term_list:
