@@ -1,5 +1,5 @@
 (*
-Zipperposition: a functional superposition prover for prototyping
+tstp-proof-checker : a simple OCaml proof checker for TSTP derivations
 Copyright (C) 2012 Simon Cruanes
 
 This is free software; you can redistribute it and/or
