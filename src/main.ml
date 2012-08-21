@@ -23,7 +23,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 open Types
 
 let file = ref "stdin"
-let debug = ref 0
 
 (** parse_args returns parameters *)
 let parse_args () =
@@ -63,11 +62,12 @@ let () =
   let steps = parse_file ~recursive:true !file in
   if !debug > 0
     then Format.printf "parsed file %s@.steps:@[<v>%a@]@." !file
-        (Utils.print_list ~sep:"" Utils.print_step) steps;
+        (Utils.print_list ~sep:"" (Utils.print_step ~prefix:"")) steps;
   let derivation = Utils.make_derivation steps in
   if not (Checks.derivation_is_dag derivation)
     then Format.printf "the derivation is not a DAG@.Failure.@."
     else
+      Format.printf "the derivation is a DAG...@.";
       let validated_proof = Checks.check_all derivation in
       if Checks.check_structure validated_proof
         then Format.printf "checked steps form a valid proof.@.Success.@."

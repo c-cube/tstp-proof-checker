@@ -34,7 +34,7 @@ class type prover_info =
 let prover_E = 
   object
     method name = "E"
-    method command = "eprover --cpu-limit 10 -tAuto -xAuto -l0 --tstp-in"
+    method command = "eprover --cpu-limit=10 -tAuto -xAuto -l0 --tstp-in"
     method success = regexp_case_fold "SZS Status Theorem"
   end
 
@@ -59,10 +59,11 @@ let print_proof_obligation formatter proof step_name =
   List.iter
     (fun premise ->
       let premise = { premise with step_role=RoleAxiom; step_annotation=None} in
-      Format.fprintf formatter "@[<h>%a@]@." Utils.print_step premise)
+      Format.fprintf formatter "@[<h>%a@]@." (Utils.print_step ~prefix:"ax") premise)
     premise_steps;
-  let goal_step = { goal_step with step_annotation=None } in
-  Format.fprintf formatter "@[<h>%a@]@." Utils.print_step goal_step
+  Format.fprintf formatter "@[<hov 4>fof(%s, %s,@ @[<h>%a@]).@]@."
+    (Utils.print_name ~prefix:"goal" goal_step.step_name) "negated_conjecture"
+    (Utils.print_formula ~cnf:false) (Not (Utils.clause_to_fof goal_step.step_formula))
 
 (** open a fifo and convert it to a pair of channels *)
 let make_channels (o,  i) =
@@ -78,7 +79,9 @@ let slurp_lines input =
   let lines = ref [] in
   let rec next_line () =
     try
-      lines := (input_line input) :: !lines;
+      let line = input_line input in
+      lines := line :: !lines;
+      Format.printf "read line %s@." line;
       next_line ()
     with End_of_file -> !lines
   in next_line ()
@@ -90,18 +93,26 @@ let check_step prover derivation step_name =
   | RoleAxiom -> Success (prover#name, step_name)
   | RoleDerived ->
   (* start the prover *)
-  let o, i = Unix.pipe () in
-  let pid = Unix.create_process "/bin/sh" [|prover#command|] i o o in
-  let output, input = make_channels (o, i) in
+  let o1, i1 = Unix.pipe ()
+  and o2, i2 = Unix.pipe () in
+  if !debug > 0
+    then Format.printf "run prover %s on step %s@." prover#name (Utils.print_name step_name);
+  let pid = Unix.create_process "/bin/sh" [|prover#command|] o1 i2 i2 in
+  let output, input = make_channels (o2, i1) in
   let in_formatter = Format.formatter_of_out_channel input in
   (* send derivation obligation to the prover *)
   print_proof_obligation in_formatter derivation step_name;
+  print_proof_obligation Format.std_formatter derivation step_name;
   Format.pp_print_flush in_formatter ();
   flush input;
   (* wait for the prover to finish *)
-  ignore (Unix.waitpid [] pid);
   let lines = slurp_lines output in
-  close_channels (output, input);
+  ignore (Unix.waitpid [] pid);
+  Format.printf "prover %s on step %s is done.@." prover#name (Utils.print_name step_name);
+  Unix.close o1;
+  Unix.close i1;
+  Unix.close o2;
+  Unix.close i2;
   (* analyse output after the prover is done *)
   if List.exists
     (fun line -> try ignore (Str.search_forward prover#success line 0); true
@@ -128,16 +139,20 @@ let check_all ?provers derivation =
         validated_proof provers)
     derivation validated_proof
 
-(** check that the derivation is a DAG *)
+(** check that the derivation is a DAG with axiom leaves *)
 let derivation_is_dag derivation =
-  M.for_all
-    (fun _ step ->
+  (* recursive check *)
+  let rec recurse step_name =
+    try
+      let step = M.find step_name derivation in
       if step.step_role = RoleAxiom then true else
-      let source_names = Utils.source_names step in
-      List.for_all
-        (fun source_name -> M.mem source_name derivation)
-        source_names)
-    derivation
+      (* check premises *)
+      List.for_all recurse (Utils.source_names step)
+    with Not_found ->
+      Format.printf "step %s not found@." (Utils.print_name step_name);
+      false (* step not present *)
+  in
+  M.for_all (fun step_name _ -> recurse step_name) derivation
 
 (** structural check of a validated_proof *)
 let check_structure validated_proof =

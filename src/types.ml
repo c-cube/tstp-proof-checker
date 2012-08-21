@@ -24,6 +24,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 exception PARSE_ERROR
 exception UNKNOWN_SYMBOL
 
+let debug = ref 0
+
 (** A first order term *)
 type term =
   | Leaf of string
