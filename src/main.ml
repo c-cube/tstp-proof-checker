@@ -61,4 +61,5 @@ let parse_file ~recursive f =
 let () =
   parse_args ();
   let steps = parse_file ~recursive:true !file in
-  Format.printf "parsed file %s@." !file
+  Format.printf "parsed file %s@.steps:@[<v>%a@]@." !file
+    (Utils.print_list ~sep:"" Utils.print_step) steps
