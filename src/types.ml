@@ -66,5 +66,31 @@ module M = Map.Make(
     let compare = Pervasives.compare
   end)
 
-(** a proof is a set of name-indexed steps *)
-type proof = step M.t
+(** a derivation is a set of name-indexed steps *)
+type derivation = step M.t
+
+(** result of checking the step: success or failure, with (prover, step name) *)
+type check_result = Success of (string * name) | Failure of (string * name)
+
+let check_result_name = function
+  | Success (_, name) | Failure (_, name) -> name
+
+let is_success = function
+  | Success _ -> true | Failure _ -> false
+let is_failure res = not (is_success res)
+
+(** a validated proof is a set of steps with associated check_results *)
+class validated_proof derivation =
+  object (self : 'a)
+    val derivation = derivation
+    val results : (name * check_result list) M.t = M.empty
+    (** get the results for the given step *)
+    method results_for step_name =
+      try M.find step_name results
+      with Not_found -> (M.find step_name derivation, [])
+    (** add a result for the given step *)
+    method add_result step_name check_result =
+      let step, step_results = self#results_for step_name in
+      ({< results = M.add step_name (step, check_result::step_results) results >}
+        :> 'a)
+  end

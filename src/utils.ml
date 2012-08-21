@@ -39,6 +39,22 @@ let rec clause_lits formula =
   | Or (a, b) -> clause_lits a @ clause_lits b
   | _ -> [formula]
 
+(** find the names used in the source of a step *)
+let source_names step =
+  let rec recurse acc annot = match annot with
+  | AnnotFile (_, name) -> name :: acc
+  | AnnotName name -> name :: acc
+  | AnnotInference(_, annots) -> List.fold_left recurse acc annots
+  in
+  match step.step_role, step.step_annotation with
+  | RoleAxiom, _-> []
+  | RoleDerived, None -> failwith "derived formula has no annotation"
+  | RoleDerived, Some annot -> recurse [] annot
+
+(** build a proof from a list of steps *)
+let make_derivation steps =
+  List.fold_left (fun der step -> M.add step.step_name step der) M.empty steps
+
 open Format
 
 (** powerful sprintf *)
@@ -71,10 +87,11 @@ let rec print_term formatter term = match term with
 
 let rec print_formula ~cnf formatter formula =
   if cnf
-    then
+    then begin
+      assert (is_clause formula);
       let lits = clause_lits formula in
       fprintf formatter "(%a)" (print_list ~sep:" | " (print_formula ~cnf:false)) lits
-    else match formula with
+    end else match formula with
     | Forall (vars, f) ->
       fprintf formatter "@[<h>![%a]@] %a" (print_list print_term) vars
         (print_formula ~cnf) f
