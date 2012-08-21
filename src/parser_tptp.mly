@@ -46,6 +46,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 %token THF
 %token INCLUDE
 %token INFERENCE
+%token THEORY
 %token FILE
 %token <string> SINGLE_QUOTED
 %token <string> DOLLAR_WORD
@@ -256,8 +257,8 @@ cnf_annotated:
 formula_role:
   | LOWER_WORD
     { match $1 with 
-      | "axiom" -> RoleAxiom 
-      | "derived" -> RoleDerived
+      | "axiom" | "conjecture" -> RoleAxiom 
+      | "derived" | "plain" | "negated_conjecture" -> RoleDerived
       | _ -> failwith ("unknown formula role "^$1) }
 
 annotations:
@@ -434,6 +435,8 @@ source_list:
       { [$1] }
   | source COMMA source_list
       { $1 :: $3 }
+  | THEORY LEFT_PARENTHESIS general_term_list RIGHT_PARENTHESIS COMMA source_list
+      { $6 }
 
 inference_name:
   | LOWER_WORD

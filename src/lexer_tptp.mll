@@ -120,7 +120,7 @@ let comment_block = "/*" not_star_slash '*' '*'* '/'
 let comment = comment_line | comment_block
 *)
 let one_line_comment =
-  '%' [^ '\n' '\r']* ('\n' | "\r\n")
+  ('%' | '#') [^ '\n' '\r']* ('\n' | "\r\n")
 
 let multi_line_comment =
   "/*" ( [^ '*'] | ('*' [^ '/']) )* "*/"
@@ -173,6 +173,7 @@ rule token =
       | "include"                    { update_token (Lexing.lexeme lexbuf); INCLUDE }
       | "inference"                  { update_token (Lexing.lexeme lexbuf); INFERENCE }
       | "file"                      { update_token (Lexing.lexeme lexbuf); FILE }
+      | "theory"                      { update_token (Lexing.lexeme lexbuf); THEORY }
       | lower_word                   { update_token (Lexing.lexeme lexbuf); LOWER_WORD(Lexing.lexeme lexbuf) }
       | upper_word                   { update_token (Lexing.lexeme lexbuf); UPPER_WORD(Lexing.lexeme lexbuf) }
       | single_quoted_lower_word     { update_token (Lexing.lexeme lexbuf); 
