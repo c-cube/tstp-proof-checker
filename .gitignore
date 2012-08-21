@@ -9,3 +9,4 @@
 *.cmxa
 *.swp
 src/_build
+*.native
