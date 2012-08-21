@@ -132,7 +132,7 @@ let check_all ?provers derivation =
 let derivation_is_dag derivation =
   M.for_all
     (fun _ step ->
-      if step.role = RoleAxiom then true else
+      if step.step_role = RoleAxiom then true else
       let source_names = Utils.source_names step in
       List.for_all
         (fun source_name -> M.mem source_name derivation)
@@ -155,9 +155,9 @@ let check_structure validated_proof =
     match step.step_role with
     | RoleAxiom -> true
     | RoleDerived ->
-      let check_results = validated_proof#results_for step_name in
+      let _, check_results = validated_proof#results_for step_name in
       let step_ok = List.for_all is_success check_results in
-      let premises = source_names step in
+      let premises = Utils.source_names step in
       let premises_ok = List.for_all check_step_rec premises in
       step_ok && premises_ok
   in

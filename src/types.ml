@@ -82,15 +82,16 @@ let is_failure res = not (is_success res)
 (** a validated proof is a set of steps with associated check_results *)
 class validated_proof derivation =
   object (self : 'a)
-    val derivation = derivation
+    method derivation : derivation = derivation
     val results : (name * check_result list) M.t = M.empty
     (** get the results for the given step *)
     method results_for step_name =
       try M.find step_name results
-      with Not_found -> (M.find step_name derivation, [])
+      with Not_found -> (step_name, [])
     (** add a result for the given step *)
-    method add_result step_name check_result =
-      let step, step_results = self#results_for step_name in
-      ({< results = M.add step_name (step, check_result::step_results) results >}
+    method add_result result =
+      let step_name = check_result_name result in
+      let _, step_results = self#results_for step_name in
+      ({< results = M.add step_name (step_name, result::step_results) results >}
         :> 'a)
   end

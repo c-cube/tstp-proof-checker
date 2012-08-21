@@ -61,11 +61,11 @@ let parse_file ~recursive f =
 let () =
   parse_args ();
   let steps = parse_file ~recursive:true !file in
-  if !debug
+  if !debug > 0
     then Format.printf "parsed file %s@.steps:@[<v>%a@]@." !file
         (Utils.print_list ~sep:"" Utils.print_step) steps;
-  let derivation = make_derivation steps in
-  if not Checks.derivation_is_dag derivation
+  let derivation = Utils.make_derivation steps in
+  if not (Checks.derivation_is_dag derivation)
     then Format.printf "the derivation is not a DAG@.Failure.@."
     else
       let validated_proof = Checks.check_all derivation in

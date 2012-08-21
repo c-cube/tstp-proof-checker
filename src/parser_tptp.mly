@@ -111,7 +111,7 @@ file:
 
 tptp_input:
   | annotated_formula
-      { Printf.printf "parsed annotated formula\n"; Some $1 }
+      { Some $1 }
 
   | include_
       { None }
