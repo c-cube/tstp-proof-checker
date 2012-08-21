@@ -20,6 +20,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 
 (** Types used in the proof checker *)
 
+(** it's all in the name. *)
+exception PARSE_ERROR
+exception UNKNOWN_SYMBOL
+
 (** A first order term *)
 type term =
   | Leaf of string
@@ -34,25 +38,33 @@ type formula =
   | Or of formula * formula
   | Not of formula
   | Atom of term
+  | Equal of term * term
+  | True
 
-(** a proof for a step *)
-type derivation =
-  | Axiom of string * string      (** file, name *)
-  | Derived of string * int list  (** inference name, premises list *)
+(** the (unique) name of a derivation step *)
+type name = IntName of int | StringName of string
+(** annotation for a step *)
+and annotation =
+  | AnnotFile of string * name                   (** file, name *)
+  | AnnotName of name                            (** another step *)
+  | AnnotInference of string * annotation list   (** inference name, premises list *)
+(** role of a formula in a step *)
+and role = RoleAxiom | RoleDerived
 
 (** a derivation step *)
 type step = {
-  step_idx: int;                  (** unique index of the step *)
-  step_formula: formula;          (** formula derived in this step *)
-  step_derivation: derivation;    (** derivation that leads to the formula *)
+  step_name: name;                      (** unique index of the step *)
+  step_role: role;                      (** role of the step *)
+  step_formula: formula;                (** formula derived in this step *)
+  step_annotation: annotation option;   (** annotation that justifies the formula *)
 }
 
-(** type for maps of integers *)
+(** type for maps of names to something *)
 module M = Map.Make(
   struct
-    type t = int
+    type t = name
     let compare = Pervasives.compare
   end)
 
-(** a proof is a set of int-indexed steps *)
+(** a proof is a set of name-indexed steps *)
 type proof = step M.t
