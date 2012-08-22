@@ -79,8 +79,7 @@ let slurp i_chan =
 (** call a subprocess with given string as input, and get its output as a string *)
 let popen argv input =
   let o1, i1 = Unix.pipe ()
-  and o2, i2 = Unix.pipe ()
-  and pid = ref 0 in
+  and o2, i2 = Unix.pipe () in
   match Unix.fork () with
   | 0 -> (* parent process *)
     Unix.close o1;
@@ -99,13 +98,14 @@ let popen argv input =
     Unix.close o2;
     output
   | child_pid ->
-    pid := child_pid;
     Unix.close i1;
     Unix.close o2;
     (* redirect stdin *)
     Unix.dup2 o1 Unix.stdin;
     Unix.dup2 i2 Unix.stdout;
     Unix.dup2 i2 Unix.stderr;
+    Unix.close o1;
+    Unix.close i2;
     (* exec subprocess *)
     Unix.execvp argv.(0) argv
 
