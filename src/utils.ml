@@ -110,10 +110,10 @@ let rec print_formula ~cnf formatter formula =
       fprintf formatter "(%a)" (print_list ~sep:" | " (print_formula ~cnf:false)) lits
     end else match formula with
     | Forall (vars, f) ->
-      fprintf formatter "@[<h>![%a]@] %a" (print_list print_term) vars
+      fprintf formatter "@[<h>![%a]:@] %a" (print_list print_term) vars
         (print_formula ~cnf) f
     | Exists (vars, f) ->
-      fprintf formatter "@[<h>?[%a]@] %a" (print_list print_term) vars
+      fprintf formatter "@[<h>?[%a]:@] %a" (print_list print_term) vars
         (print_formula ~cnf) f
     | And (a, b) ->
       fprintf formatter "(%a & %a)" (print_formula ~cnf) a (print_formula ~cnf) b
@@ -143,14 +143,15 @@ and print_role = function
   | RoleDerived -> "derived"
 
 let print_step ?(prefix="") formatter step =
+  (* convert to fof if needed *)
   let cnf = is_clause step.step_formula in
-  let kind = if cnf then "cnf" else "fof" in
+  let formula = if cnf then clause_to_fof step.step_formula else step.step_formula in
   match step.step_annotation with
   | None ->
-    fprintf formatter "@[<hov 4>%s(%s, %s,@ @[<h>%a@]).@]" kind
+    fprintf formatter "@[<hov 4>fof(%s, %s,@ @[<h>%a@]).@]"
       (print_name ~prefix step.step_name) (print_role step.step_role)
-      (print_formula ~cnf) step.step_formula
+      (print_formula ~cnf:false) formula
   | Some annot ->
-    fprintf formatter "@[<hov 4>%s(%s, %s,@ @[<h>%a@],@ %s).@]" kind
+    fprintf formatter "@[<hov 4>fof(%s, %s,@ @[<h>%a@],@ %s).@]"
       (print_name ~prefix step.step_name) (print_role step.step_role)
-      (print_formula ~cnf) step.step_formula (print_annotation annot)
+      (print_formula ~cnf:false) formula (print_annotation annot)

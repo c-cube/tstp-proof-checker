@@ -35,7 +35,7 @@ let prover_E =
   object
     method name = "E"
     method command = "eprover --cpu-limit=10 -tAuto -xAuto -l0 --tstp-in"
-    method success = regexp_case_fold "SZS Status Theorem"
+    method success = regexp_case_fold "Proof found"
   end
 
 let prover_SPASS =
@@ -62,21 +62,52 @@ let print_proof_obligation proof formatter step_name =
       Format.fprintf formatter "@[<h>%a@]@." (Utils.print_step ~prefix:"ax") premise)
     premise_steps;
   Format.fprintf formatter "@[<hov 4>fof(%s, %s,@ @[<h>%a@]).@]@."
-    (Utils.print_name ~prefix:"goal" goal_step.step_name) "negated_conjecture"
-    (Utils.print_formula ~cnf:false) (Not (Utils.clause_to_fof goal_step.step_formula))
+    (Utils.print_name ~prefix:"goal" goal_step.step_name) "conjecture"
+    (Utils.print_formula ~cnf:false) (Utils.clause_to_fof goal_step.step_formula)
 
 (** slurp the entire content of the file_descr into a string *)
 let slurp i_chan =
-  let buf_size = 32
+  let buf_size = 1024
   and content = ref "" in
   let rec next () =
-    Format.printf "next ()@.";
     let buf = String.make buf_size 'a' in
     try really_input i_chan buf 0 buf_size;
-        Format.printf "read %s@." buf;
         content := !content ^ buf; next ()
     with End_of_file -> !content ^ buf
   in next ()
+
+(** call a subprocess with given string as input, and get its output as a string *)
+let popen argv input =
+  let o1, i1 = Unix.pipe ()
+  and o2, i2 = Unix.pipe ()
+  and pid = ref 0 in
+  match Unix.fork () with
+  | 0 -> (* parent process *)
+    Unix.close o1;
+    Unix.close i2;
+    let output_chan = Unix.out_channel_of_descr i1
+    and input_chan = Unix.in_channel_of_descr o2 in
+    (* send input to child *)
+    set_binary_mode_out output_chan false;
+    output_string output_chan input;
+    flush output_chan;
+    close_out output_chan;
+    (* read output from child *)
+    set_binary_mode_in input_chan false;
+    let output = slurp input_chan in
+    (* cleanup and return *)
+    Unix.close o2;
+    output
+  | child_pid ->
+    pid := child_pid;
+    Unix.close i1;
+    Unix.close o2;
+    (* redirect stdin *)
+    Unix.dup2 o1 Unix.stdin;
+    Unix.dup2 i2 Unix.stdout;
+    Unix.dup2 i2 Unix.stderr;
+    (* exec subprocess *)
+    Unix.execvp argv.(0) argv
 
 (** check a proof step using a prover *)
 let check_step prover derivation step_name =
@@ -84,36 +115,21 @@ let check_step prover derivation step_name =
   match step.step_role with
   | RoleAxiom -> Success (prover#name, step_name)
   | RoleDerived ->
-  (* start the prover *)
-  let o1, i1 = Unix.pipe ()
-  and o2, i2 = Unix.pipe () in
-  Format.printf "run prover %s on step %s@." prover#name (Utils.print_name step_name);
-  (*let pid = Unix.create_process "sh" [|"sh"; "-c"; "exec " ^ prover#command|] o1 i2 i2 in *)
-  let pid = Unix.create_process "cat" [|"cat"|] o1 i2 i2 in
-  (* send derivation obligation to the prover *)
-  let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step_name
-  and output_chan = Unix.out_channel_of_descr i1
-  and input_chan = Unix.in_channel_of_descr o2 in
-  set_binary_mode_out output_chan false;
-  output_string output_chan obligation;
-  flush output_chan;
-  close_out output_chan;
-  Format.printf "sent input to prover@.";
-  print_endline obligation; (* debug *)
-  (* wait for the prover to finish *)
-  set_binary_mode_in input_chan false;
-  let output = slurp input_chan in
-  Format.printf "got output of prover@.";
-  ignore (Unix.waitpid [] pid);
-  Format.printf "prover %s on step %s is done.@." prover#name (Utils.print_name step_name);
-  Unix.close i2;
-  Unix.close o1;
-  Unix.close o2;
-  (* analyse output after the prover is done *)
-  if try ignore (Str.search_forward prover#success output 0); true
-    with Not_found -> false
-    then Success (prover#name, step_name)
-    else Failure (prover#name, step_name)
+    let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step_name in
+    (* run the prover *)
+    if !debug > 1 then Format.printf "run prover %s on step %s (obligation %s)@." prover#name (Utils.print_name step_name) obligation;
+    let output = popen [|"sh"; "-c"; "exec "^prover#command|] obligation in
+    if !debug > 1 then Format.printf "prover %s on step %s is done (result %s).@." prover#name (Utils.print_name step_name) output;
+    let result =
+      if (try ignore (Str.search_forward prover#success output 0); true
+        with Not_found -> false)
+      then Success (prover#name, step_name)
+      else Failure (prover#name, step_name)
+    in
+    (if !debug > 0 then match result with
+      | Success _ -> Format.printf "success of %s with prover %s@." (Utils.print_name step_name) prover#name
+      | Failure _ -> Format.printf "failure of %s with prover %s@." (Utils.print_name step_name) prover#name);
+    result
 
 (** sequential check of steps *)
 let check_all ?provers derivation =
