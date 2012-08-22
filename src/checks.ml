@@ -49,7 +49,7 @@ let prover_SPASS =
 let default_provers = [prover_E; prover_SPASS]
 
 (** print the proof obligation for the given step to the formatter *)
-let print_proof_obligation formatter proof step_name =
+let print_proof_obligation proof formatter step_name =
   let goal_step = M.find step_name proof in
   (* all the steps used as premisses *)
   let premise_steps = List.map
@@ -65,26 +65,18 @@ let print_proof_obligation formatter proof step_name =
     (Utils.print_name ~prefix:"goal" goal_step.step_name) "negated_conjecture"
     (Utils.print_formula ~cnf:false) (Not (Utils.clause_to_fof goal_step.step_formula))
 
-(** open a fifo and convert it to a pair of channels *)
-let make_channels (o,  i) =
-  Unix.in_channel_of_descr o, Unix.out_channel_of_descr i
-
-(** close the channels *)
-let close_channels (o, i) =
-  Unix.close (Unix.descr_of_in_channel o);
-  Unix.close (Unix.descr_of_out_channel i)
-
-(** slurp the entire content of the in_channel into a list of lines *)
-let slurp_lines input =
-  let lines = ref [] in
-  let rec next_line () =
-    try
-      let line = input_line input in
-      lines := line :: !lines;
-      Format.printf "read line %s@." line;
-      next_line ()
-    with End_of_file -> !lines
-  in next_line ()
+(** slurp the entire content of the file_descr into a string *)
+let slurp i_chan =
+  let buf_size = 32
+  and content = ref "" in
+  let rec next () =
+    Format.printf "next ()@.";
+    let buf = String.make buf_size 'a' in
+    try really_input i_chan buf 0 buf_size;
+        Format.printf "read %s@." buf;
+        content := !content ^ buf; next ()
+    with End_of_file -> !content ^ buf
+  in next ()
 
 (** check a proof step using a prover *)
 let check_step prover derivation step_name =
@@ -95,28 +87,31 @@ let check_step prover derivation step_name =
   (* start the prover *)
   let o1, i1 = Unix.pipe ()
   and o2, i2 = Unix.pipe () in
-  if !debug > 0
-    then Format.printf "run prover %s on step %s@." prover#name (Utils.print_name step_name);
-  let pid = Unix.create_process "/bin/sh" [|"-c"; prover#command|] o1 i2 i2 in
-  let output, input = make_channels (o2, i1) in
-  let in_formatter = Format.formatter_of_out_channel input in
+  Format.printf "run prover %s on step %s@." prover#name (Utils.print_name step_name);
+  (*let pid = Unix.create_process "sh" [|"sh"; "-c"; "exec " ^ prover#command|] o1 i2 i2 in *)
+  let pid = Unix.create_process "cat" [|"cat"|] o1 i2 i2 in
   (* send derivation obligation to the prover *)
-  print_proof_obligation in_formatter derivation step_name;
-  print_proof_obligation Format.std_formatter derivation step_name;
-  Format.pp_print_flush in_formatter ();
-  flush input;
+  let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step_name
+  and output_chan = Unix.out_channel_of_descr i1
+  and input_chan = Unix.in_channel_of_descr o2 in
+  set_binary_mode_out output_chan false;
+  output_string output_chan obligation;
+  flush output_chan;
+  close_out output_chan;
+  Format.printf "sent input to prover@.";
+  print_endline obligation; (* debug *)
   (* wait for the prover to finish *)
-  let lines = slurp_lines output in
+  set_binary_mode_in input_chan false;
+  let output = slurp input_chan in
+  Format.printf "got output of prover@.";
   ignore (Unix.waitpid [] pid);
   Format.printf "prover %s on step %s is done.@." prover#name (Utils.print_name step_name);
-  Unix.close o1;
-  Unix.close i1;
-  Unix.close o2;
   Unix.close i2;
+  Unix.close o1;
+  Unix.close o2;
   (* analyse output after the prover is done *)
-  if List.exists
-    (fun line -> try ignore (Str.search_forward prover#success line 0); true
-                 with Not_found -> false) lines
+  if try ignore (Str.search_forward prover#success output 0); true
+    with Not_found -> false
     then Success (prover#name, step_name)
     else Failure (prover#name, step_name)
 
