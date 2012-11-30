@@ -4,19 +4,19 @@ INTERFACE_FILES = $(wildcard src/*.mli)
 IMPLEMENTATION_FILES = $(INTERFACE_FILES:%.mli=%.ml)
 
 all:
-	cd src && ocamlbuild -libs str,unix -tag debug main.native
+	ocamlbuild -libs str,unix -tag debug src/tstp_check.native
 
 profile:
-	cd src && ocamlbuild -libs str,unix -tags debug,profile main.native
+	ocamlbuild -libs str,unix -tags debug,profile src/tstp_check.native
 
 tests: all
-	cd tests && ocamlbuild -libs str,unix -I src tests.native
+	ocamlbuild -libs str,unix -I src tests/tstp_check.native
 
 doc:
-	cd src && ocamlbuild main.docdir/index.html
+	ocamlbuild src/main.docdir/index.html
 
 clean:
-	cd src && ocamlbuild -clean
+	ocamlbuild -clean
 
 tags:
 	ctags $(IMPLEMENTATION_FILES) $(INTERFACE_FILES)
