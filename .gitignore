@@ -8,5 +8,6 @@
 *.cmxs
 *.cmxa
 *.swp
-src/_build
+_build
 *.native
+
