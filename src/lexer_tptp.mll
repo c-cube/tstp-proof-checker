@@ -71,14 +71,14 @@ let lexing_error (error: string) (token: string) =
             ^ " at line " ^ string_of_int !current_line_index
             ^ " column " ^ string_of_int !current_column_index
             ^ ":\n" ^ token);
-  raise Types.PARSE_ERROR
+  raise Utils.PARSE_ERROR
 
 let parse_error () =
   print_endline ("Parse error"
             ^ " at line " ^ string_of_int !current_line_index
             ^ " column " ^ string_of_int !current_column_index
             ^ ":\n" ^ !current_token);
-  raise Types.PARSE_ERROR
+  raise Utils.PARSE_ERROR
 
 }
 
@@ -197,7 +197,7 @@ rule token =
       | "<=>"                        { update_token (Lexing.lexeme lexbuf); BIJECTION }
       | "=>"                         { update_token (Lexing.lexeme lexbuf); LEFT_IMPLICATION }
       | "<="                         { update_token (Lexing.lexeme lexbuf); RIGHT_IMPLICATION }
-      | "<~>"                        { update_token (Lexing.lexeme lexbuf); UNKNOWN }
+      | "<~>"                        { update_token (Lexing.lexeme lexbuf); XOR }
       | negation                     { update_token (Lexing.lexeme lexbuf); NEGATION }
       | "$true"                      { update_token (Lexing.lexeme lexbuf); DOLLAR_TRUE }
       | "$false"                      { update_token (Lexing.lexeme lexbuf); DOLLAR_FALSE }

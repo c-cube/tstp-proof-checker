@@ -20,8 +20,49 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 
 (** the module used to check proof steps and the proof structure itself *)
 
-open Types
+open Logic
 open Str
+
+(** a derivation is a set of name-indexed steps *)
+type derivation = step NameMap.t
+
+let make_derivation steps =
+  List.fold_left
+    (fun der step -> NameMap.add step.step_name step der)
+    NameMap.empty steps
+
+(** result of checking the step: success or failure, with (prover, step name) *)
+type check_result =
+  | Success of (string * name)
+  | Failure of (string * name)
+
+let check_result_name = function
+  | Success (_, name)
+  | Failure (_, name) -> name
+
+let is_success = function
+  | Success _ -> true | Failure _ -> false
+let is_failure res = not (is_success res)
+
+(** a validated proof is a set of steps with associated check_results *)
+class validated_proof derivation =
+  object (self : 'a)
+    val results : (name * check_result list) NameMap.t = NameMap.empty
+
+    method derivation : derivation = derivation
+    
+    (** get the results for the given step *)
+    method results_for step_name =
+      try NameMap.find step_name results
+      with Not_found -> (step_name, [])
+
+    (** add a result for the given step *)
+    method add_result result =
+      let step_name = check_result_name result in
+      let _, step_results = self#results_for step_name in
+      ({< results = NameMap.add step_name (step_name, result::step_results) results >}
+        :> 'a)
+  end
 
 (** data useful to invoke a prover *)
 class type prover_info =
@@ -35,7 +76,7 @@ let prover_E =
   object
     method name = "E"
     method command = "eprover --cpu-limit=10 -tAuto -xAuto -l0 --tstp-in"
-    method success = regexp_case_fold "Proof found"
+    method success = regexp_case_fold "# Proof found"
   end
 
 let prover_SPASS =
@@ -50,20 +91,20 @@ let default_provers = [prover_E; prover_SPASS]
 
 (** print the proof obligation for the given step to the formatter *)
 let print_proof_obligation proof formatter step_name =
-  let goal_step = M.find step_name proof in
+  let goal_step = NameMap.find step_name proof in
   (* all the steps used as premisses *)
   let premise_steps = List.map
-    (fun name -> M.find name proof)
-    (Utils.source_names goal_step) in
+    (fun name -> NameMap.find name proof)
+    (source_names goal_step) in
   (* print all premisses as axioms, and goal as conjecture *)
   List.iter
     (fun premise ->
-      let premise = { premise with step_role=RoleAxiom; step_annotation=None} in
-      Format.fprintf formatter "@[<h>%a@]@." (Utils.print_step ~prefix:"ax") premise)
+      let premise = { premise with step_role= `Axiom; step_annotation=None} in
+      Format.fprintf formatter "@[<h>%a@]@." (print_step ~prefix:"ax") premise)
     premise_steps;
-  Format.fprintf formatter "@[<hov 4>fof(%s, %s,@ @[<h>%a@]).@]@."
-    (Utils.print_name ~prefix:"goal" goal_step.step_name) "conjecture"
-    (Utils.print_formula ~cnf:false) (Utils.clause_to_fof goal_step.step_formula)
+  Format.fprintf formatter "@[<h>fof(goal%a, %s,@ @[<hv>%a@]).@]@."
+    print_name goal_step.step_name "conjecture"
+    (print_formula ~cnf:false) (clause_to_fof goal_step.step_formula)
 
 (** slurp the entire content of the file_descr into a string *)
 let slurp i_chan =
@@ -109,26 +150,30 @@ let popen argv input =
     (* exec subprocess *)
     Unix.execvp argv.(0) argv
 
-(** check a proof step using a prover *)
+(** check a proof step using a prover (TODO use functions from Unix) *)
 let check_step prover derivation step_name =
-  let step = M.find step_name derivation in
+  let step = NameMap.find step_name derivation in
   match step.step_role with
-  | RoleAxiom -> Success (prover#name, step_name)
-  | RoleDerived ->
+  | role when input_role role -> Success (prover#name, step_name)
+  | _ ->
     let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step_name in
     (* run the prover *)
-    if !debug > 1 then Format.printf "run prover %s on step %s (obligation %s)@." prover#name (Utils.print_name step_name) obligation;
+    Utils.debug 2 (lazy (Utils.sprintf "run prover %s on step %a (obligation %s)@."
+                   prover#name print_name step_name obligation));
     let output = popen [|"sh"; "-c"; "exec "^prover#command|] obligation in
-    if !debug > 1 then Format.printf "prover %s on step %s is done (result %s).@." prover#name (Utils.print_name step_name) output;
+    Utils.debug 2 (lazy (Utils.sprintf "prover %s on step %a is done (result %s).@."
+                   prover#name print_name step_name output));
     let result =
       if (try ignore (Str.search_forward prover#success output 0); true
         with Not_found -> false)
       then Success (prover#name, step_name)
       else Failure (prover#name, step_name)
     in
-    (if !debug > 0 then match result with
-      | Success _ -> Format.printf "success of %s with prover %s@." (Utils.print_name step_name) prover#name
-      | Failure _ -> Format.printf "failure of %s with prover %s@." (Utils.print_name step_name) prover#name);
+    Utils.debug 1 (lazy (match result with
+                  | Success _ -> Utils.sprintf "success of %a with prover %s@."
+                                  print_name step_name prover#name
+                  | Failure _ -> Utils.sprintf "failure of %a with prover %s@."
+                                  print_name step_name prover#name));
     result
 
 (** sequential check of steps *)
@@ -139,7 +184,7 @@ let check_all ?provers derivation =
   | Some provers -> provers
   in
   let validated_proof = new validated_proof derivation in
-  M.fold
+  NameMap.fold
     (fun step_name _ validated_proof ->
       (* check the step using all provers *)
       List.fold_left
@@ -155,35 +200,35 @@ let derivation_is_dag derivation =
   (* recursive check *)
   let rec recurse step_name =
     try
-      let step = M.find step_name derivation in
-      if step.step_role = RoleAxiom then true else
+      let step = NameMap.find step_name derivation in
+      if input_role step.step_role then true else
       (* check premises *)
-      List.for_all recurse (Utils.source_names step)
+      List.for_all recurse (source_names step)
     with Not_found ->
-      Format.printf "step %s not found@." (Utils.print_name step_name);
+      Format.printf "step %a not found@." print_name step_name;
       false (* step not present *)
   in
-  M.for_all (fun step_name _ -> recurse step_name) derivation
+  NameMap.for_all (fun step_name _ -> recurse step_name) derivation
 
 (** structural check of a validated_proof *)
 let check_structure validated_proof =
   (* list of steps that contain $false *)
-  let falses = M.fold
+  let falses = NameMap.fold
     (fun step_name step acc ->
       match step.step_formula with
-      | Not True -> step_name :: acc
+      | FFalse -> step_name :: acc
       | _ -> acc)
     validated_proof#derivation [] in
   if falses = [] then failwith "no $false found in proof" else
-  (* function that checks that all steps up to axioms are well formed *)
+  (* function that checks that all steps up to axioms are well formed TODO check for cycles *)
   let rec check_step_rec step_name =
-    let step = M.find step_name validated_proof#derivation in
+    let step = NameMap.find step_name validated_proof#derivation in
     match step.step_role with
-    | RoleAxiom -> true
-    | RoleDerived ->
+    | role when input_role role -> true
+    | _ ->
       let _, check_results = validated_proof#results_for step_name in
       let step_ok = List.for_all is_success check_results in
-      let premises = Utils.source_names step in
+      let premises = source_names step in
       let premises_ok = List.for_all check_step_rec premises in
       step_ok && premises_ok
   in

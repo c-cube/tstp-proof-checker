@@ -20,9 +20,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 %{
 
-  (** TSTP parser *)
-
-  open Types
+  (** TSTP parser for fof and cnf *)
+  open Logic
 
   (* includes from input *)
   let include_files: string list ref =
@@ -65,12 +64,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 %token FORALL
 %token EXISTS
 %token BIJECTION
+%token XOR
 %token LEFT_IMPLICATION
 %token RIGHT_IMPLICATION
-%token UNKNOWN
 
 %start parse_file
-%type <Types.step list * string list> parse_file
+%type <Logic.step list * string list> parse_file
 
 %%
 
@@ -90,7 +89,7 @@ parse_file:
 
   | EOI
       { print_endline "empty problem specification";
-        raise Types.PARSE_ERROR }
+        raise Utils.PARSE_ERROR }
 
 
 /* parse rules */
@@ -139,7 +138,7 @@ fof_annotated:
     fof_formula annotations RIGHT_PARENTHESIS DOT
     {
       {
-        step_name = $3;
+        step_name = term_to_name $3;
         step_role = $5;
         step_formula = $7;
         step_annotation = $8;
@@ -167,17 +166,17 @@ nonassoc_binary:
 
 binary_connective:
   | BIJECTION
-    { fun x y -> And ((Or ((Not x), y)), (Or (x, (Not y)))) }
+    { mk_equiv }
   | LEFT_IMPLICATION
-    { fun x y -> Or ((Not x), y) }
+    { mk_imply }
   | RIGHT_IMPLICATION
-    { fun x y -> Or (x, (Not y)) }
-  | UNKNOWN
-    { raise Types.UNKNOWN_SYMBOL }
+    { fun x y -> mk_imply y x }
+  | XOR
+    { mk_xor }
   | NEGATION OR
-    { fun x y -> Not (Or (x, y)) }
+    { fun x y -> mk_not (mk_or x y) }
   | NEGATION AND
-    { fun x y -> Not (And (x, y)) }
+    { fun x y -> mk_not (mk_and x y) }
 
 assoc_binary:
   | or_formula
@@ -187,23 +186,23 @@ assoc_binary:
 
 or_formula:
   | unitary_formula OR more_or_formula
-    { Or ($1, $3) }
+    { mk_or $1 $3 }
 
 more_or_formula:
   | unitary_formula
     { $1 }
   | unitary_formula OR more_or_formula
-    { Or ($1, $3) }
+    { mk_or $1 $3 }
 
 and_formula:
   | unitary_formula AND more_and_formula
-    { And ($1, $3) }
+    { mk_and $1 $3 }
 
 more_and_formula:
   | unitary_formula
     { $1 }
   | unitary_formula AND more_and_formula
-    { And ($1, $3) }
+    { mk_and $1 $3 }
 
 unitary_formula:
   | quantified_formula
@@ -222,9 +221,9 @@ quantified_formula:
 
 quantifier:
   | FORALL
-    { fun vars t -> Forall (vars, t) }
+    { mk_forall }
   | EXISTS
-    { fun vars t -> Exists (vars, t) }
+    { mk_exists }
 
 variable_list:
   | variable
@@ -238,7 +237,7 @@ unary_formula:
 
 unary_connective:
   | NEGATION
-    { fun t -> Not t }
+    { mk_not }
 
 
 cnf_annotated:
@@ -247,7 +246,7 @@ cnf_annotated:
       {
         (* let filename = !Utils.cur_filename in *)
         {
-          step_name = $3;
+          step_name = term_to_name $3;
           step_role = $5;
           step_formula = $7;
           step_annotation = $8;
@@ -257,8 +256,11 @@ cnf_annotated:
 formula_role:
   | LOWER_WORD
     { match $1 with 
-      | "axiom" | "conjecture" -> RoleAxiom 
-      | "derived" | "plain" | "negated_conjecture" -> RoleDerived
+      | "axiom" -> `Axiom
+      | "conjecture" -> `Conjecture
+      | "hypothesis" -> `Hypothesis
+      | "derived" -> `Derived
+      | "plain" -> `Plain
       | _ -> failwith ("unknown formula role "^$1) }
 
 annotations:
@@ -283,7 +285,7 @@ disjunction:
       { $1 }
 
   | literal OR disjunction
-      { Or ($1, $3) }
+      { mk_or $1 $3 }
 
 
 
@@ -293,7 +295,7 @@ literal:
       { $1 }
 
   | NEGATION atomic_formula
-      { Not $2 }
+      { mk_not $2 }
 
 atomic_formula:
   | plain_atom
@@ -307,7 +309,7 @@ atomic_formula:
 
 plain_atom:
   | plain_term_top
-      { Atom $1 }
+      { mk_atom $1 }
 
 arguments:
   | term
@@ -318,19 +320,19 @@ arguments:
 
 defined_atom:
   | DOLLAR_TRUE
-      { True }
+      { mk_true }
 
   | DOLLAR_FALSE
-      { Not True }
+      { mk_false }
 
   | term EQUALITY term
-      { Equal ($1, $3) }
+      { mk_eq $1 $3 }
   | term DISEQUALITY term
-      { Not (Equal ($1, $3)) }
+      { mk_not (mk_eq $1 $3) }
 
 system_atom:
   | system_term_top
-      { Atom $1 }
+      { mk_atom $1 }
 
 term:
   | function_term
@@ -351,21 +353,17 @@ function_term:
 
 plain_term_top:
   | constant
-      { Leaf $1 }
+      { mk_node $1 [] }
 
   | functor_ LEFT_PARENTHESIS arguments RIGHT_PARENTHESIS
-      { let subterms = $1 :: $3 in
-        Node subterms
-      }
+      { mk_node $1 $3 }
 
 plain_term:
   | constant
-      { Leaf $1 }
+      { mk_node $1 [] }
 
   | functor_ LEFT_PARENTHESIS arguments RIGHT_PARENTHESIS
-      { let subterms = $1 :: $3 in
-        Node subterms
-      }
+      { mk_node $1 $3 }
 
 constant:
   | atomic_word
@@ -373,35 +371,28 @@ constant:
 
 functor_:
   | atomic_word
-      { Leaf $1 }
+      { $1 }
 
 defined_term:
   | number
-      { print_endline ("Parser_tptp: <defined_term: number> not supported: "
-                      ^ $1);
-        raise Types.PARSE_ERROR }
+      { mk_num $1 }
 
   | DISTINCT_OBJECT
-      { print_endline ("Parser_tptp: <defined_term: distinct_object> not supported: " ^ $1);
-        raise Types.PARSE_ERROR }
+      { mk_node $1 [] }
 
 system_term_top:
   | system_constant
-      { Leaf $1 }
+      { mk_node $1 [] }
 
   | system_functor LEFT_PARENTHESIS arguments RIGHT_PARENTHESIS
-      { let subterms = (Leaf $1) :: $3 in
-        Node subterms
-      }
+      { mk_node $1 $3 }
 
 system_term:
   | system_constant
-      { Leaf $1 }
+      { mk_node $1 [] }
 
   | system_functor LEFT_PARENTHESIS arguments RIGHT_PARENTHESIS
-      { let subterms = (Leaf $1) :: $3 in
-        Node subterms
-      }
+      { mk_node $1 $3 }
 
 system_functor:
   | atomic_system_word
@@ -415,20 +406,20 @@ system_constant:
 
 variable:
   | UPPER_WORD
-      { Var $1 }
+      { mk_var $1 }
 
 source:
   | FILE LEFT_PARENTHESIS file_name COMMA name RIGHT_PARENTHESIS
-      { AnnotFile ($3, $5) }
+      { mk_node "file" [mk_node $3 []; $5] }
   | INFERENCE LEFT_PARENTHESIS inference_name COMMA useful_info COMMA
     parent_info_list RIGHT_PARENTHESIS
-      { AnnotInference ($3, $7) }
+      { mk_node "inference" [$3; $7] }
   | name 
-      { AnnotName $1 }
+      { $1 }
 
 parent_info_list:
   | LEFT_BRACKET source_list RIGHT_BRACKET
-      { $2 }
+      { mk_list $2 }
 
 source_list:
   | source
@@ -436,11 +427,11 @@ source_list:
   | source COMMA source_list
       { $1 :: $3 }
   | THEORY LEFT_PARENTHESIS general_term_list RIGHT_PARENTHESIS COMMA source_list
-      { $6 }
+      { (mk_node "theory" $3) :: $6 }
 
 inference_name:
   | LOWER_WORD
-      { $1 }
+      { mk_node $1 [] }
 
 optional_info:
   | useful_info
@@ -476,26 +467,28 @@ name_list:
 
 general_term:
   | general_data
-      { "" }
+      { $1 }
 
   | general_data COLON general_term
-      { "" }
+      { match $1 with
+        | TList l -> mk_list (l @ [$3])
+        | _ -> mk_list [$1; $3] }
 
   | general_list
-      { "" }
+      { mk_list $1 }
 
 general_data:
   | atomic_word
-      { "" }
+      { mk_node $1 [] }
 
   | atomic_word LEFT_PARENTHESIS general_arguments RIGHT_PARENTHESIS
-      { "" }
+      { mk_node $1 $3 }
 
   | number
-      { "" }
+      { mk_num $1 }
 
   | DISTINCT_OBJECT
-      { "" }
+      { mk_node $1 [] }
 
 general_arguments:
   | general_term
@@ -521,10 +514,10 @@ general_term_list:
 
 name:
   | atomic_word
-      { StringName $1 }
+      { mk_node $1 [] }
 
   | UNSIGNED_INTEGER
-      { IntName (int_of_string $1) }
+      { mk_int (int_of_string $1) }
 
 atomic_word:
   | LOWER_WORD
@@ -539,13 +532,13 @@ atomic_system_word:
 
 number:
   | REAL
-      { $1 }
+      { failwith "cannot parse real numbers for now" }
 
   | SIGNED_INTEGER
-      { $1 }
+      { Num.num_of_int (int_of_string $1) }
 
   | UNSIGNED_INTEGER
-      { $1 }
+      { Num.num_of_int (int_of_string $1) }
 
 file_name:
   | SINGLE_QUOTED

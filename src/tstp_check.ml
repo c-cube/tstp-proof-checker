@@ -20,7 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 
 (** main file, that parses arguments and check the proof *)
 
-open Types
+open Logic
 
 let file = ref "stdin"
 
@@ -28,7 +28,7 @@ let file = ref "stdin"
 let parse_args () =
   (* options list *) 
   let options =
-    [ ("-debug", Arg.Set_int debug, "debug level");
+    [ ("-debug", Arg.Set_int Utils.debug_level, "set debug level");
     ]
   in
   Arg.parse options (fun f -> file := f) "check the given proof"
@@ -60,10 +60,9 @@ let parse_file ~recursive f =
 let () =
   parse_args ();
   let steps = parse_file ~recursive:true !file in
-  if !debug > 0
-    then Format.printf "parsed file %s@.steps:@[<v>%a@]@." !file
-        (Utils.print_list ~sep:"" (Utils.print_step ~prefix:"")) steps;
-  let derivation = Utils.make_derivation steps in
+  Utils.debug 1 (lazy (Utils.sprintf "parsed file %s@.steps:@[<v>%a@]@." !file
+                (Utils.print_list ~sep:"" (print_step ~prefix:"")) steps));
+  let derivation = Checks.make_derivation steps in
   if not (Checks.derivation_is_dag derivation)
     then Format.printf "the derivation is not a DAG@.Failure.@."
     else
