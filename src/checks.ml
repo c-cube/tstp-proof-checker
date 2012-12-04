@@ -192,25 +192,43 @@ let check_all ?provers derivation =
         validated_proof results)
     derivation validated_proof
 
+module NameSet = Set.Make(struct type t = name let compare = compare end)
+
 (** check that the derivation is a DAG with axiom leaves *)
 let derivation_is_dag derivation =
+  (* cache, to memoize which nodes have a DAG as dependencies *)
+  let have_dag = ref NameSet.empty in
   (* recursive check *)
-  let rec recurse step_name =
+  let rec recurse explored step_name =
     try
       let step = NameMap.find step_name derivation in
-      if input_role step.step_role then true else
-      (* check premises *)
-      List.for_all recurse (source_names step)
+      if NameSet.mem step_name explored
+        then (Utils.debug 1 (lazy (Utils.sprintf "step %a depends on itself" print_name step_name)); false)
+        else if NameSet.mem step_name !have_dag then true  (* already checked *)
+        else
+          let explored' = NameSet.add step_name explored in
+          (* check premises, adding step_name to the set of explored steps *)
+          let result = List.for_all (recurse explored') (source_names step) in
+          (if result then have_dag := NameSet.add step_name !have_dag);
+          result
     with Not_found ->
       Format.printf "step %a not found@." print_name step_name;
       false (* step not present *)
+  (* check only if step contains 'false' *)
+  and check_dag_from step_name = 
+    let step = NameMap.find step_name derivation in
+    match step.step_formula with
+    | FFalse -> recurse NameSet.empty step_name  (* check DAG from the clause *)
+    | _ -> true  (* do not start checking from this step *)
   in
-  NameMap.for_all (fun step_name _ -> recurse step_name) derivation
+  NameMap.for_all (fun step_name _ -> check_dag_from step_name) derivation
 
-exception NoFalseFound
+exception NoFalseFound  (** raised when no empty clause is found in the input *)
 
 (** structural check of a validated_proof *)
 let check_structure validated_proof =
+  (* cache, to memoize which nodes have a correct structure *)
+  let correct_structure = ref NameSet.empty in
   (* list of steps that contain $false *)
   let falses = NameMap.fold
     (fun step_name step acc ->
@@ -219,17 +237,26 @@ let check_structure validated_proof =
       | _ -> acc)
     validated_proof#derivation [] in
   if falses = [] then raise NoFalseFound else
-  (* function that checks that all steps up to axioms are well formed TODO check for cycles *)
-  let rec check_step_rec step_name =
-    let step = NameMap.find step_name validated_proof#derivation in
-    match step.step_role with
-    | role when input_role role -> true
-    | _ ->
-      let _, check_results = validated_proof#results_for step_name in
-      let step_ok = List.for_all is_success check_results in
-      let premises = source_names step in
-      let premises_ok = List.for_all check_step_rec premises in
-      step_ok && premises_ok
+  (* function that checks that all steps up to axioms are well formed *)
+  let rec check_step_rec explored step_name =
+    if NameSet.mem step_name explored then false (* cycle *)
+    else if NameSet.mem step_name !correct_structure then true (* memoized *)
+    else begin
+      let step = NameMap.find step_name validated_proof#derivation in
+      match step.step_role with
+      | role when input_role role -> true
+      | _ ->
+        let _, check_results = validated_proof#results_for step_name in
+        (* not a derivation, or all provers agreed on success? *)
+        let step_ok = List.for_all is_success check_results in
+        let premises = source_names step in
+        (* check premises recursively *)
+        let explored' = NameSet.add step_name explored in
+        let premises_ok = List.for_all (check_step_rec explored') premises in
+        let result = step_ok && premises_ok in
+        (if result then correct_structure := NameSet.add step_name !correct_structure);
+        result
+    end
   in
   (* is there an occurrence of $false that has a well-formed proof? *)
-  List.exists check_step_rec falses
+  List.exists (check_step_rec NameSet.empty) falses
