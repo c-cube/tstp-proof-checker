@@ -135,27 +135,29 @@ let rec is_clause formula = match formula with
 
 (** extract literals from a clausal formula *)
 let rec clause_lits formula =
-  assert (is_clause formula);
   match formula with
   | FOr (a, b) -> clause_lits a @ clause_lits b
   | _ -> [formula]
 
 (** convert a clause to fof *)
 let clause_to_fof formula =
-  assert (is_clause formula);
   let rec fvars vars t = match t with
   | TNum _ -> vars
   | TVar _ -> TSet.add t vars
   | TNode (_,l) | TList l -> List.fold_left fvars vars l
   and lit_fvars vars lit = match lit with
-  | FTrue -> vars
+  | FTrue | FFalse -> vars
   | FAtom t -> fvars vars t
   | FEqual (a, b) -> fvars (fvars vars a) b
+  | FForall (v, f) -> lit_fvars vars f  (* superset! *)
+  | FExists (v, f) -> lit_fvars vars f
   | FNot a -> lit_fvars vars a
-  | _ -> assert false in
+  | FAnd (a, b) | FOr (a, b) | FImply (a, b) | FEquiv (a, b) ->
+    lit_fvars (lit_fvars vars a) b
+  in
   let clause_fvars = List.fold_left lit_fvars TSet.empty (clause_lits formula) in
   (* quantify over all free variables *)
-  if TSet.is_empty clause_fvars
+  if TSet.is_empty clause_fvars || not (is_clause formula)
     then formula
     else mk_forall (TSet.elements clause_fvars) formula
 
