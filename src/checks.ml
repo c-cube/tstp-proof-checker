@@ -26,6 +26,11 @@ open Str
 (** a derivation is a set of name-indexed steps *)
 type derivation = step NameMap.t
 
+let derivation_size d =
+  let n = ref 0 in
+  NameMap.iter (fun _ _ -> incr n) d;
+  !n
+
 let make_derivation steps =
   List.fold_left
     (fun der step -> NameMap.add step.step_name step der)
@@ -202,6 +207,8 @@ let derivation_is_dag derivation =
   in
   NameMap.for_all (fun step_name _ -> recurse step_name) derivation
 
+exception NoFalseFound
+
 (** structural check of a validated_proof *)
 let check_structure validated_proof =
   (* list of steps that contain $false *)
@@ -211,7 +218,7 @@ let check_structure validated_proof =
       | FFalse -> step_name :: acc
       | _ -> acc)
     validated_proof#derivation [] in
-  if falses = [] then failwith "no $false found in proof" else
+  if falses = [] then raise NoFalseFound else
   (* function that checks that all steps up to axioms are well formed TODO check for cycles *)
   let rec check_step_rec step_name =
     let step = NameMap.find step_name validated_proof#derivation in
@@ -224,4 +231,5 @@ let check_structure validated_proof =
       let premises_ok = List.for_all check_step_rec premises in
       step_ok && premises_ok
   in
+  (* is there an occurrence of $false that has a well-formed proof? *)
   List.exists check_step_rec falses

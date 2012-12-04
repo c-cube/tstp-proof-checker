@@ -67,12 +67,16 @@ let () =
     then List.iter (Format.printf "@[<h>step %a@]@." (print_step ~prefix:"")) steps
     else Utils.debug 1 (lazy (Utils.sprintf "parsed file %s@.steps:@[<v>%a@]@." !file
                       (Utils.print_list ~sep:"" (print_step ~prefix:"")) steps)));
-  let derivation = Checks.make_derivation steps in
-  if not (Checks.derivation_is_dag derivation)
-    then Format.printf "%% the derivation is not a DAG@.Failure.@."
-    else
-      Format.printf "%% the derivation is a DAG...@.";
-      let validated_proof = Checks.check_all derivation in
-      if Checks.check_structure validated_proof
-        then Format.printf "%% checked steps form a valid proof.@.Success.@."
-        else Format.printf "%% checked steps do not form a valid proof.@.Failure.@."
+  try
+    let derivation = Checks.make_derivation steps in
+    Format.printf "%% parsed derivation of %d steps@." (Checks.derivation_size derivation);
+    if not (Checks.derivation_is_dag derivation)
+      then Format.printf "%% the derivation is not a DAG@.Failure.@."
+      else
+        Format.printf "%% the derivation is a DAG...@.";
+        let validated_proof = Checks.check_all derivation in
+        if Checks.check_structure validated_proof
+          then Format.printf "%% checked steps form a valid proof.@.Success.@."
+          else Format.printf "%% checked steps do not form a valid proof.@.Failure.@."
+  with Checks.NoFalseFound ->
+    Format.printf "%% no empty clause found.@.Failure.@."

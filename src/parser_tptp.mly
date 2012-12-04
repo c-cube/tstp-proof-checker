@@ -88,8 +88,8 @@ parse_file:
       }
 
   | EOI
-      { print_endline "empty problem specification";
-        raise Utils.PARSE_ERROR }
+      { print_endline "% empty problem specification";
+        [], [] }
 
 
 /* parse rules */
