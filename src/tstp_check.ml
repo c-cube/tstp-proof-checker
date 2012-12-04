@@ -24,14 +24,17 @@ open Logic
 
 let file = ref "stdin"
 
+let print_problem = ref false
+
 (** parse_args returns parameters *)
 let parse_args () =
   (* options list *) 
   let options =
     [ ("-debug", Arg.Set_int Utils.debug_level, "set debug level");
+      ("-pp", Arg.Set print_problem, "print problem after parsing");
     ]
   in
-  Arg.parse options (fun f -> file := f) "check the given proof"
+  Arg.parse options (fun f -> file := f) "check the given TSTP derivation"
 
 (** parse given tptp file *)
 let parse_file ~recursive f =
@@ -60,8 +63,10 @@ let parse_file ~recursive f =
 let () =
   parse_args ();
   let steps = parse_file ~recursive:true !file in
-  Utils.debug 1 (lazy (Utils.sprintf "parsed file %s@.steps:@[<v>%a@]@." !file
-                (Utils.print_list ~sep:"" (print_step ~prefix:"")) steps));
+  (if !print_problem
+    then List.iter (Format.printf "@[<h>step %a@]@." (print_step ~prefix:"")) steps
+    else Utils.debug 1 (lazy (Utils.sprintf "parsed file %s@.steps:@[<v>%a@]@." !file
+                      (Utils.print_list ~sep:"" (print_step ~prefix:"")) steps)));
   let derivation = Checks.make_derivation steps in
   if not (Checks.derivation_is_dag derivation)
     then Format.printf "the derivation is not a DAG@.Failure.@."

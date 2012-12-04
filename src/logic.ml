@@ -181,9 +181,9 @@ let rec print_term formatter term = match term with
   | TNum n -> Format.fprintf formatter "%s" (Num.string_of_num n)
   | TNode (f, []) -> Format.fprintf formatter "%s" f
   | TNode (f, l) ->
-    Format.fprintf formatter "@[%s(%a)@]" f (Utils.print_list print_term) l
+    Format.fprintf formatter "%s(%a)" f (Utils.print_list print_term) l
   | TList l ->
-    Format.fprintf formatter "@[%a@]" (Utils.print_list print_term) l
+    Format.fprintf formatter "%a" (Utils.print_list print_term) l
 
 let rec print_formula ~cnf formatter formula =
   if cnf
@@ -199,21 +199,21 @@ let rec print_formula ~cnf formatter formula =
       Format.fprintf formatter "@[<h>?[%a]:@] %a" (Utils.print_list print_term) vars
         (print_formula ~cnf) f
     | FAnd (a, b) ->
-      Format.fprintf formatter "(%a & %a)" (print_formula ~cnf) a (print_formula ~cnf) b
+      Format.fprintf formatter "(%a@ & %a)" (print_formula ~cnf) a (print_formula ~cnf) b
     | FOr (a, b) ->
-      Format.fprintf formatter "(%a | %a)" (print_formula ~cnf) a (print_formula ~cnf) b
+      Format.fprintf formatter "(%a@ | %a)" (print_formula ~cnf) a (print_formula ~cnf) b
     | FImply (a, b) ->
-      Format.fprintf formatter "(%a => %a)" (print_formula ~cnf) a (print_formula ~cnf) b
+      Format.fprintf formatter "(%a@ => %a)" (print_formula ~cnf) a (print_formula ~cnf) b
     | FEquiv (a, b) ->
-      Format.fprintf formatter "(%a <=> %a)" (print_formula ~cnf) a (print_formula ~cnf) b
+      Format.fprintf formatter "(%a@ <=> %a)" (print_formula ~cnf) a (print_formula ~cnf) b
     | FTrue -> Format.pp_print_string formatter "$true"
     | FFalse -> Format.pp_print_string formatter "$false"
     | FNot (FEqual (a, b)) ->
-      Format.fprintf formatter "(%a != %a)" print_term a print_term b
+      Format.fprintf formatter "@[<h>(%a != %a)@]" print_term a print_term b
     | FNot a -> Format.fprintf formatter "~%a" (print_formula ~cnf) a
-    | FAtom t -> print_term formatter t
+    | FAtom t -> Format.fprintf formatter "@[<h>%a@]" print_term t
     | FEqual (a, b) ->
-      Format.fprintf formatter "(%a = %a)" print_term a print_term b
+      Format.fprintf formatter "@[<h>(%a = %a)@]" print_term a print_term b
 
 let print_role formatter role =
   Format.fprintf formatter "%s"
@@ -244,10 +244,10 @@ let print_step ?(prefix="") formatter step =
   let formula = if cnf then clause_to_fof step.step_formula else step.step_formula in
   match step.step_annotation with
   | None ->
-    Format.fprintf formatter "@[<h>fof(%a, %a,@ @[<hv>%a@]).@]"
+    Format.fprintf formatter "@[<h>fof(%a, %a, @[<hv 2>%a@]).@]"
       print_name step.step_name print_role step.step_role
       (print_formula ~cnf:false) formula
   | Some annot ->
-    Format.fprintf formatter "@[<h>fof(%a, %a,@ @[<hv>%a@],@ %a).@]"
+    Format.fprintf formatter "@[<h>fof(%a, %a, @[<hv 2>%a@], @[<h>%a@]).@]"
       print_name step.step_name print_role step.step_role
       (print_formula ~cnf:false) formula print_term annot
