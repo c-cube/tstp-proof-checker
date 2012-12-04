@@ -426,11 +426,17 @@ source_list:
       { [$1] }
   | source COMMA source_list
       { $1 :: $3 }
-  | THEORY LEFT_PARENTHESIS general_term_list RIGHT_PARENTHESIS COMMA source_list
-      { (mk_node "theory" $3) :: $6 }
+  | special_source 
+      { [$1] }
+  | special_source COMMA source_list
+      { $1 :: $3 }
+
+special_source:
+  | THEORY LEFT_PARENTHESIS general_term_list RIGHT_PARENTHESIS
+      { mk_node "theory" $3 }
 
 inference_name:
-  | LOWER_WORD
+  | atomic_word
       { mk_node $1 [] }
 
 optional_info:
