@@ -33,15 +33,19 @@ let make_derivation steps =
 
 (** result of checking the step: success or failure, with (prover, step name) *)
 type check_result =
+  | Unchecked of name           (** not checked, for some reason *)
   | Success of (string * name)
   | Failure of (string * name)
 
 let check_result_name = function
+  | Unchecked name
   | Success (_, name)
   | Failure (_, name) -> name
 
 let is_success = function
-  | Success _ -> true | Failure _ -> false
+  | Unchecked _ | Success _ -> true
+  | Failure _ -> false
+
 let is_failure res = not (is_success res)
 
 (** a validated proof is a set of steps with associated check_results *)
@@ -117,64 +121,39 @@ let slurp i_chan =
     with End_of_file -> !content ^ buf
   in next ()
 
-(** call a subprocess with given string as input, and get its output as a string *)
-let popen argv input =
-  let o1, i1 = Unix.pipe ()
-  and o2, i2 = Unix.pipe () in
-  match Unix.fork () with
-  | 0 -> (* parent process *)
-    Unix.close o1;
-    Unix.close i2;
-    let output_chan = Unix.out_channel_of_descr i1
-    and input_chan = Unix.in_channel_of_descr o2 in
-    (* send input to child *)
-    set_binary_mode_out output_chan false;
-    output_string output_chan input;
-    flush output_chan;
-    close_out output_chan;
-    (* read output from child *)
-    set_binary_mode_in input_chan false;
-    let output = slurp input_chan in
-    (* cleanup and return *)
-    Unix.close o2;
-    output
-  | child_pid ->
-    Unix.close i1;
-    Unix.close o2;
-    (* redirect stdin *)
-    Unix.dup2 o1 Unix.stdin;
-    Unix.dup2 i2 Unix.stdout;
-    Unix.dup2 i2 Unix.stderr;
-    Unix.close o1;
-    Unix.close i2;
-    (* exec subprocess *)
-    Unix.execvp argv.(0) argv
+(** Call given command with given output, and return its output as a string *)
+let popen cmd input =
+  let from, into = Unix.open_process cmd in
+  (* send input to the subprocess *)
+  output_string into input;
+  close_out into;
+  (* read ouput from the subprocess *)
+  let output = slurp from in
+  (* wait for subprocess to terminate *)
+  ignore (Unix.close_process (from, into));
+  output
 
-(** check a proof step using a prover (TODO use functions from Unix) *)
-let check_step prover derivation step_name =
-  let step = NameMap.find step_name derivation in
-  match step.step_role with
-  | role when input_role role -> Success (prover#name, step_name)
-  | _ ->
-    let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step_name in
-    (* run the prover *)
-    Utils.debug 2 (lazy (Utils.sprintf "run prover %s on step %a (obligation %s)@."
-                   prover#name print_name step_name obligation));
-    let output = popen [|"sh"; "-c"; "exec "^prover#command|] obligation in
-    Utils.debug 2 (lazy (Utils.sprintf "prover %s on step %a is done (result %s).@."
-                   prover#name print_name step_name output));
-    let result =
-      if (try ignore (Str.search_forward prover#success output 0); true
-        with Not_found -> false)
-      then Success (prover#name, step_name)
-      else Failure (prover#name, step_name)
-    in
-    Utils.debug 1 (lazy (match result with
-                  | Success _ -> Utils.sprintf "success of %a with prover %s@."
-                                  print_name step_name prover#name
-                  | Failure _ -> Utils.sprintf "failure of %a with prover %s@."
-                                  print_name step_name prover#name));
-    result
+(** check a proof step using a prover *)
+let check_step prover derivation step =
+  assert (status step = `thm);
+  let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step.step_name in
+  (* run the prover *)
+  Utils.debug 2 (lazy (Utils.sprintf "run prover %s on step %a (obligation %s)"
+                 prover#name print_name step.step_name obligation));
+  let cmd = prover#command in
+  Utils.debug 3 (lazy (Utils.sprintf "command is %s, input is %s" cmd obligation));
+  let output = popen cmd obligation in
+  Utils.debug 2 (lazy (Utils.sprintf "prover %s on step %a is done (result %s)."
+                 prover#name print_name step.step_name output));
+  let result =
+    if (try ignore (Str.search_forward prover#success output 0); true
+      with Not_found -> false)
+    then Success (prover#name, step.step_name)
+    else Failure (prover#name, step.step_name)
+  in
+  let pp_result = if is_success result then "success" else "failure" in
+  Format.printf "  %s of step %a with prover %s@." pp_result print_name step.step_name prover#name;
+  result
 
 (** sequential check of steps *)
 let check_all ?provers derivation =
@@ -186,13 +165,21 @@ let check_all ?provers derivation =
   let validated_proof = new validated_proof derivation in
   NameMap.fold
     (fun step_name _ validated_proof ->
-      (* check the step using all provers *)
+      let step = NameMap.find step_name derivation in
+      let results =
+        match status step with
+        | `input -> Format.printf "step %a is an input step@." print_name step_name; [Unchecked step_name]
+        | `cth -> Format.printf "step %a is a conjecture step@." print_name step_name; [Unchecked step_name]
+        | `esa -> Format.printf "step %a is an equisatisfiability step@." print_name step_name; [Unchecked step_name]
+        | `thm ->
+          (* check the step using all provers *)
+          (Format.printf "step %a is a derivation step@." print_name step_name;
+          List.map (fun prover -> check_step prover derivation step) provers)
+      in
+      (* integrate the results into the validated_proof *)
       List.fold_left
-        (fun validated_proof prover ->
-          (* check step using this prover *)
-          let result = check_step prover derivation step_name in
-          validated_proof#add_result result)
-        validated_proof provers)
+        (fun validated_proof result -> validated_proof#add_result result)
+        validated_proof results)
     derivation validated_proof
 
 (** check that the derivation is a DAG with axiom leaves *)

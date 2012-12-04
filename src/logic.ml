@@ -174,6 +174,20 @@ let source_names step =
   | _, None -> failwith "derived formula has no annotation"
   | _, Some annot -> recurse [] annot
 
+(** find the status of the step *)
+let status step =
+  let substatus = function
+  | TNode ("esa", []) -> `esa
+  | TNode ("cth", []) -> `cth
+  | TNode ("thm", []) -> `thm
+  | _ -> failwith "bad status"
+  in
+  match step.step_role, step.step_annotation with
+  | role, _ when input_role role -> `input
+  | _, Some (TNode ("file", [_])) -> `input
+  | _, Some (TNode ("inference", [_; TList [TNode ("status", [s])]; _])) -> substatus s
+  | _ -> failwith "bad annotation"
+
 (*s pretty printing *)
 
 let rec print_term formatter term = match term with
@@ -183,7 +197,7 @@ let rec print_term formatter term = match term with
   | TNode (f, l) ->
     Format.fprintf formatter "%s(%a)" f (Utils.print_list print_term) l
   | TList l ->
-    Format.fprintf formatter "%a" (Utils.print_list print_term) l
+    Format.fprintf formatter "[%a]" (Utils.print_list print_term) l
 
 let rec print_formula ~cnf formatter formula =
   if cnf

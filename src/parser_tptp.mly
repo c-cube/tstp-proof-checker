@@ -413,7 +413,7 @@ source:
       { mk_node "file" [mk_node $3 []; $5] }
   | INFERENCE LEFT_PARENTHESIS inference_name COMMA useful_info COMMA
     parent_info_list RIGHT_PARENTHESIS
-      { mk_node "inference" [$3; $7] }
+      { mk_node "inference" [$3; $5; $7] }
   | name 
       { $1 }
 
@@ -448,7 +448,7 @@ optional_info:
 
 useful_info:
   | LEFT_BRACKET general_term_list RIGHT_BRACKET
-      { $2 }
+      { mk_list $2 }
       
 
 include_:
