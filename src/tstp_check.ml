@@ -69,10 +69,10 @@ let () =
                       (Utils.print_list ~sep:"" (print_step ~prefix:"")) steps)));
   let derivation = Checks.make_derivation steps in
   if not (Checks.derivation_is_dag derivation)
-    then Format.printf "the derivation is not a DAG@.Failure.@."
+    then Format.printf "%% the derivation is not a DAG@.Failure.@."
     else
-      Format.printf "the derivation is a DAG...@.";
+      Format.printf "%% the derivation is a DAG...@.";
       let validated_proof = Checks.check_all derivation in
       if Checks.check_structure validated_proof
-        then Format.printf "checked steps form a valid proof.@.Success.@."
-        else Format.printf "checked steps do not form a valid proof.@.Failure.@."
+        then Format.printf "%% checked steps form a valid proof.@.Success.@."
+        else Format.printf "%% checked steps do not form a valid proof.@.Failure.@."

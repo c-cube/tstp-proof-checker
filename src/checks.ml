@@ -153,7 +153,8 @@ let check_step prover derivation step =
     else Failure (prover#name, step.step_name)
   in
   let pp_result = if is_success result then "success" else "failure" in
-  Format.printf "  %s of step %a with prover %s@." pp_result print_name step.step_name prover#name;
+  Utils.debug 1 (lazy (Utils.sprintf " ... %s of step %a with prover %s"
+                 pp_result print_name step.step_name prover#name));
   result
 
 (** sequential check of steps *)
@@ -169,12 +170,15 @@ let check_all ?provers derivation =
       let step = NameMap.find step_name derivation in
       let results =
         match status step with
-        | `input -> Format.printf "step %a is an input step@." print_name step_name; [Unchecked step_name]
-        | `cth -> Format.printf "step %a is a conjecture step@." print_name step_name; [Unchecked step_name]
-        | `esa -> Format.printf "step %a is an equisatisfiability step@." print_name step_name; [Unchecked step_name]
+        | `input -> Utils.debug 1 (lazy (Utils.sprintf "* step %a is an input step" print_name step_name));
+          [Unchecked step_name]
+        | `cth -> Utils.debug 1 (lazy (Utils.sprintf "* step %a is a conjecture step" print_name step_name));
+          [Unchecked step_name]
+        | `esa -> Utils.debug 1 (lazy (Utils.sprintf "* step %a is an equisatisfiability step" print_name step_name))
+        ; [Unchecked step_name]
         | `thm ->
           (* check the step using all provers *)
-          (Format.printf "step %a is a derivation step@." print_name step_name;
+          (Utils.debug 1 (lazy (Utils.sprintf "* step %a is a derivation step" print_name step_name));
           List.map (fun prover -> check_step prover derivation step) provers)
       in
       (* integrate the results into the validated_proof *)
