@@ -80,7 +80,7 @@ let prover_E =
   object
     method name = "E"
     method command = "eprover --cpu-limit=10 -tAuto -xAuto -l0 --tstp-in"
-    method success = regexp_case_fold "# Proof found"
+    method success = regexp_case_fold "SZS status Theorem"
   end
 
 let prover_SPASS =
@@ -112,13 +112,14 @@ let print_proof_obligation proof formatter step_name =
 
 (** slurp the entire content of the file_descr into a string *)
 let slurp i_chan =
-  let buf_size = 1024
-  and content = ref "" in
+  let buf_size = 128 in
+  let content = Buffer.create 120
+  and buf = String.make 128 'a' in
   let rec next () =
-    let buf = String.make buf_size 'a' in
-    try really_input i_chan buf 0 buf_size;
-        content := !content ^ buf; next ()
-    with End_of_file -> !content ^ buf
+    let num = input i_chan buf 0 buf_size in
+    if num = 0
+      then Buffer.contents content (* EOF *)
+      else (Buffer.add_substring content buf 0 num; next ())
   in next ()
 
 (** Call given command with given output, and return its output as a string *)
