@@ -95,6 +95,13 @@ let prover_SPASS =
     method success = regexp_case_fold "Proof found"
   end
 
+let prover_Zenon =
+  object
+    method name = "Zenon"
+    method command = "zenon -itptp -p0 -max-time 10s -"
+    method success = regexp_case_fold "PROOF-FOUND"
+  end
+
 (** list of known provers (TODO parse it from a config file?) *)
 let default_provers = [prover_E; prover_SPASS]
 
