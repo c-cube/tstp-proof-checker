@@ -91,7 +91,7 @@ let prover_E =
 let prover_SPASS =
   object
     method name = "SPASS"
-    method command = "SPASS -TPTP -TimeLimit 10 -Stdin"
+    method command = "SPASS -TPTP -TimeLimit=10 -Stdin"
     method success = regexp_case_fold "Proof found"
   end
 
@@ -169,16 +169,21 @@ let check_step prover derivation step =
                  pp_result print_name step.step_name prover#name));
   result
 
+let pp_progress num total =
+  Format.printf "\r%% checking step %-5d on %5d" num total;
+  Format.print_flush ()
+
 (** sequential check of steps *)
 let check_all ?provers derivation =
+  let total = NameMap.cardinal derivation in
   (* provers used to check steps *)
   let provers = match provers with
   | None -> default_provers
   | Some provers -> provers
   in
   let validated_proof = new validated_proof derivation in
-  NameMap.fold
-    (fun step_name _ validated_proof ->
+  let _, validated_proof = NameMap.fold
+    (fun step_name _ (num, validated_proof) ->
       let step = NameMap.find step_name derivation in
       let results =
         match status step with
@@ -194,10 +199,15 @@ let check_all ?provers derivation =
           List.map (fun prover -> check_step prover derivation step) provers)
       in
       (* integrate the results into the validated_proof *)
-      List.fold_left
+      pp_progress num total;
+      let validated_proof = List.fold_left
         (fun validated_proof result -> validated_proof#add_result result)
-        validated_proof results)
-    derivation validated_proof
+        validated_proof results
+      in num+1, validated_proof)
+    derivation (1, validated_proof)
+  in
+  Format.printf "\n"; (* after the progress line *)
+  validated_proof
 
 module NameSet = Set.Make(struct type t = name let compare = compare end)
 
