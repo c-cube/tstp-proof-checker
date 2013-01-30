@@ -10,4 +10,4 @@
 *.swp
 _build
 *.native
-
+*.docdir
