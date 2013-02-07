@@ -31,7 +31,6 @@ let debug level msg =
 
 
 (** it's all in the name. *)
-exception PARSE_ERROR
 exception UNKNOWN_SYMBOL
 
 (** powerful sprintf *)
@@ -60,3 +59,21 @@ let rec print_list ?(sep=", ") print_elem formatter l = match l with
 
 (** name of the file being parsed *)
 let cur_filename = ref ""
+
+let prev_column_index =
+  ref 1
+
+let current_column_index =
+  ref 1
+
+let prev_line_index =
+  ref 1
+
+let current_line_index =
+  ref 1
+
+let current_token =
+  ref ""
+
+let pp_location () =
+  sprintf "line %d, column %d" !current_line_index !current_column_index

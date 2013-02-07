@@ -24,21 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 { 
 
 open Parser_tptp
-
-let prev_column_index =
-  ref 1
-
-let current_column_index =
-  ref 1
-
-let prev_line_index =
-  ref 1
-
-let current_line_index =
-  ref 1
-
-let current_token =
-  ref ""
+open Utils
 
 let update_column_index (value: int) =
   prev_column_index := !current_column_index;
@@ -71,14 +57,14 @@ let lexing_error (error: string) (token: string) =
             ^ " at line " ^ string_of_int !current_line_index
             ^ " column " ^ string_of_int !current_column_index
             ^ ":\n" ^ token);
-  raise Utils.PARSE_ERROR
+  raise Parsing.Parse_error
 
 let parse_error () =
   print_endline ("Parse error"
             ^ " at line " ^ string_of_int !current_line_index
             ^ " column " ^ string_of_int !current_column_index
             ^ ":\n" ^ !current_token);
-  raise Utils.PARSE_ERROR
+  raise Parsing.Parse_error
 
 }
 
@@ -172,8 +158,8 @@ rule token =
                                        failwith "Parser_tptp: tfh syntax not supported." }
       | "include"                    { update_token (Lexing.lexeme lexbuf); INCLUDE }
       | "inference"                  { update_token (Lexing.lexeme lexbuf); INFERENCE }
-      | "file"                      { update_token (Lexing.lexeme lexbuf); FILE }
-      | "theory"                      { update_token (Lexing.lexeme lexbuf); THEORY }
+      | "file"                       { update_token (Lexing.lexeme lexbuf); FILE }
+      | "theory"                     { update_token (Lexing.lexeme lexbuf); THEORY }
       | lower_word                   { update_token (Lexing.lexeme lexbuf); LOWER_WORD(Lexing.lexeme lexbuf) }
       | upper_word                   { update_token (Lexing.lexeme lexbuf); UPPER_WORD(Lexing.lexeme lexbuf) }
       | single_quoted_lower_word     { update_token (Lexing.lexeme lexbuf); 
@@ -200,7 +186,7 @@ rule token =
       | "<~>"                        { update_token (Lexing.lexeme lexbuf); XOR }
       | negation                     { update_token (Lexing.lexeme lexbuf); NEGATION }
       | "$true"                      { update_token (Lexing.lexeme lexbuf); DOLLAR_TRUE }
-      | "$false"                      { update_token (Lexing.lexeme lexbuf); DOLLAR_FALSE }
+      | "$false"                     { update_token (Lexing.lexeme lexbuf); DOLLAR_FALSE }
       | '$'                          { update_token (Lexing.lexeme lexbuf); DOLLAR }
       | '&'                          { update_token (Lexing.lexeme lexbuf); AND }
       | '|'                          { update_token (Lexing.lexeme lexbuf); OR }

@@ -56,7 +56,14 @@ let parse_file ~recursive f =
       let buf = Lexing.from_channel input in
       Utils.cur_filename := f;
       Parser_tptp.parse_file Lexer_tptp.token buf
-    with _ as e -> close_in input; raise e
+    with
+    | Parsing.Parse_error as e ->
+      close_in input;
+      Format.eprintf "%% parse error at %s@." (Utils.pp_location ());
+      raise e
+    | _ as e ->
+      close_in input;
+      raise e
   in aux [f] []
 
 (** main entry point *)

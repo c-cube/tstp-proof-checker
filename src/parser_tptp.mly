@@ -261,6 +261,12 @@ formula_role:
       | "hypothesis" -> `Hypothesis
       | "derived" -> `Derived
       | "plain" -> `Plain
+      | "negated_conjecture" -> `Negated_conjecture
+      | "theorem" -> `Theorem
+      | "definition" -> `Definition
+      | "assumption" -> `Assumption
+      | "lemma" -> `Lemma
+      | "type" -> `Type
       | _ -> failwith ("unknown formula role "^$1) }
 
 annotations:
@@ -414,6 +420,8 @@ source:
   | INFERENCE LEFT_PARENTHESIS inference_name COMMA useful_info COMMA
     parent_info_list RIGHT_PARENTHESIS
       { mk_node "inference" [$3; $5; $7] }
+  | term
+      { $1 }
   | name 
       { $1 }
 

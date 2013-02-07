@@ -148,7 +148,6 @@ let popen cmd input =
 
 (** check a proof step using a prover *)
 let check_step prover derivation step =
-  assert (status step = `thm);
   let obligation = Utils.sprintf "%a" (print_proof_obligation derivation) step.step_name in
   (* run the prover *)
   Utils.debug 2 (lazy (Utils.sprintf "run prover %s on step %a (obligation %s)"
@@ -197,6 +196,8 @@ let check_all ?provers derivation =
           (* check the step using all provers *)
           (Utils.debug 1 (lazy (Utils.sprintf "* step %a is a derivation step" print_name step_name));
           List.map (fun prover -> check_step prover derivation step) provers)
+        | `unknown -> Utils.debug 1 (lazy (Utils.sprintf "* step %a is unknown" print_name step_name));
+          [Unchecked step_name]
       in
       (* integrate the results into the validated_proof *)
       pp_progress num total;
@@ -259,20 +260,23 @@ let check_structure validated_proof =
     if NameSet.mem step_name explored then false (* cycle *)
     else if NameSet.mem step_name !correct_structure then true (* memoized *)
     else begin
-      let step = NameMap.find step_name validated_proof#derivation in
-      match step.step_role with
-      | role when input_role role -> true
-      | _ ->
-        let _, check_results = validated_proof#results_for step_name in
-        (* not a derivation, or all provers agreed on success? *)
-        let step_ok = List.for_all is_success check_results in
-        let premises = source_names step in
-        (* check premises recursively *)
-        let explored' = NameSet.add step_name explored in
-        let premises_ok = List.for_all (check_step_rec explored') premises in
-        let result = step_ok && premises_ok in
-        (if result then correct_structure := NameSet.add step_name !correct_structure);
-        result
+      try
+        let step = NameMap.find step_name validated_proof#derivation in
+        match step.step_role with
+        | role when input_role role -> true
+        | _ ->
+          let _, check_results = validated_proof#results_for step_name in
+          (* not a derivation, or all provers agreed on success? *)
+          let step_ok = List.for_all is_success check_results in
+          let premises = source_names step in
+          (* check premises recursively *)
+          let explored' = NameSet.add step_name explored in
+          let premises_ok = List.for_all (check_step_rec explored') premises in
+          let result = step_ok && premises_ok in
+          (if result then correct_structure := NameSet.add step_name !correct_structure);
+          result
+      with Not_found ->
+        true
     end
   in
   (* is there an occurrence of $false that has a well-formed proof? *)

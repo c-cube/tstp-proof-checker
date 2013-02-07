@@ -164,7 +164,7 @@ let clause_to_fof formula =
 (** find the names used in the source of a step *)
 let source_names step =
   let rec recurse acc annot = match annot with
-  | TNode ("file", [_; TNode (name, [])]) -> (NameString name) :: acc
+  | TNode ("file", _) -> acc
   | TNum n when Num.is_integer_num n -> (NameInt (Num.int_of_num n)) :: acc
   | TNode ("inference", [_; _; TList sources]) -> List.fold_left recurse acc sources
   | _ -> acc
@@ -173,20 +173,6 @@ let source_names step =
   | role, _ when input_role role -> []
   | _, None -> failwith "derived formula has no annotation"
   | _, Some annot -> recurse [] annot
-
-(** find the status of the step *)
-let status step =
-  let substatus = function
-  | TNode ("esa", []) -> `esa
-  | TNode ("cth", []) -> `cth
-  | TNode ("thm", []) -> `thm
-  | _ -> failwith "bad status"
-  in
-  match step.step_role, step.step_annotation with
-  | role, _ when input_role role -> `input
-  | _, Some (TNode ("file", [_])) -> `input
-  | _, Some (TNode ("inference", [_; TList [TNode ("status", [s])]; _])) -> substatus s
-  | _ -> failwith "bad annotation"
 
 (*s pretty printing *)
 
@@ -265,3 +251,20 @@ let print_step ?(prefix="") formatter step =
     Format.fprintf formatter "@[<h>fof(%a, %a, @[<hv 2>%a@], @[<h>%a@]).@]"
       print_name step.step_name print_role step.step_role
       (print_formula ~cnf:false) formula print_term annot
+
+(** find the status of the step *)
+let status step =
+  let substatus = function
+  | TNode ("esa", []) -> `esa
+  | TNode ("cth", []) -> `cth
+  | TNode ("thm", []) -> `thm
+  | _ -> failwith "bad status"
+  in
+  match step.step_role, step.step_annotation with
+  | role, _ when input_role role -> `input
+  | _, Some (TNode ("file", _)) -> `input
+  | _, Some (TNode ("inference", [_; TList [TNode ("status", [s])]; _])) -> substatus s
+  | _, Some t ->
+    Utils.debug 1 (lazy (Utils.sprintf "unknown annotation: %a" print_term t));
+    `unknown
+  | _, None -> failwith (Utils.sprintf "step %a has no annotation" print_name step.step_name)
